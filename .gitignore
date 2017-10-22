@@ -1,0 +1,7 @@
+.build/
+config/
+config.gen/
+dist/
+samples/
+.config*
+build.log

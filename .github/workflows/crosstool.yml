@@ -1,0 +1,75 @@
+name: Build ARMEL Toolchain
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  TARGET_ARCH: armel
+  TARGET_TUPLE: arm-linux-gnueabi
+  TARGET_GCC_VERSION: 14.2.0
+  TARGET_DEBIAN: bookworm
+  PACKAGE_VERSION: 2024.12
+  HOST_ARCH: x86_64
+  RELEASE_NAME: gcc-ev3dev--${TARGET_GCC_VERSION}-${PACKAGE_VERSION}-${HOST_ARCH}
+
+jobs:
+  build:
+    runs-on: ubuntu-late
+    strategy:
+      matrix:
+        platform: [amd64]
+    steps:
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ gperf bison flex texinfo help2man make libncurses5-dev \
+                python3-dev autoconf automake libtool libtool-bin gawk wget bzip2 xz-utils unzip \
+                patch libstdc++6 rsync git meson ninja-build
+
+      # - name: Get and Verify Crosstool-NG Release
+      #   run: |
+      #     wget http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.26.0.tar.bz2
+      #     tar xf crosstool-ng-1.26.0.tar.bz2
+      #     cd crosstool-ng-1.26.0
+      #     ./configure --prefix=/usr/local
+      #     sudo make install
+
+      - name: Build Crosstool-NG from source
+        run: |
+          git clone https://github.com/crosstool-ng/crosstool-ng
+          cd crosstool-ng
+          ./bootstrap
+          ./configure --prefix=/usr/local
+          sudo make install
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create ARMEL Build dir
+        run: |
+          mkdir -p ${GITHUB_WORKSPACE}/build
+          ls -la ${GITHUB_WORKSPACE}
+          uname -m
+
+      - name: Build Toolchain
+        working-directory: build
+        run: |
+          # Build with specified release name
+          ct-ng defconfig DEFCONFIG=${GITHUB_WORKSPACE}/config_debian-${TARGET_DEBIAN}-${TARGET_ARCH}
+          ct-ng build.6 RELEASE_NAME=${RELEASE_NAME}
+
+      - name: Package Toolchain
+        working-directory: build
+        run: |
+          tar -czf ${RELEASE_NAME}_${TARGET_TUPLE}.tar.gz ${RELEASE_NAME}_${TARGET_TUPLE}
+
+      - name: Upload Toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: armel-toolchain
+          path: build/${RELEASE_NAME}_*.tar.xz
+          retention-days: 7
